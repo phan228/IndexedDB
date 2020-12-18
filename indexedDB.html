@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+	<title>Silly Q&A</title>
+	<link rel="stylesheet"
+	href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css"
+	integrity="sha384-JcKb8q3iqJ61gNV9KGb8thSsNjpSL0n8PARn9HuZOnIxN0hoP+VmmDGMN5t9UJ0Z"
+	crossorigin="anonymous">
+	<script src="https://code.jquery.com/jquery-3.5.0.js"></script>
+	<style>
+		.buttons {text-align: center;}
+		#clearButton {margin-left: 50px;}
+	</style>
+</head>
+<body onload="initDB('project5', 'answerPool'); drawFace($('#myCanvas'))" style="background-color: lavender">
+	<br>
+	<br>
+	<div class="text-center intro-2"><h1>Silly Q&A Machine</h1></div>
+	<br>
+	<br>
+	<form action="project5.html" method="POST" id="form" class="container">
+		<div class="form-group row">
+			<p class="col-2"/>
+			<div class="col-5">
+				<label>Post a question for a silly answer:</label>
+			</div>
+			<div class="col-5">
+				<input type="text" name="question" id="question" class="input-string shadow rounded flex-container" placeholder="Type question here..." />
+			</div>
+		</div>
+		<div class="form-group row">
+			<p class="col-2"/>
+			<div class="col-5">
+				<label>Give an answer here if you want to: </label>
+			</div>
+			<div class="col-5">
+				<input type="text" name="answer" id="answer" class="input-string shadow rounded flex-container" placeholder="Type answer here..." />
+			</div>
+		</div>
+		<br>
+		<div class="buttons">
+			<button type="button" id="checkButton" class="shadow btn-success btn" onclick="checkQuestion('project5','answerPool', $('#question').val(), $('#answer').val()); happyFace($('#myCanvas'))" >Check
+			</button>
+			<button type="button" id="clearButton" class="shadow btn-success btn" onclick="clearTable('project5'); clearAnswers('answerPool'); sadFace($('#myCanvas'))">Clear database</button>
+		</div>
+		<br>
+		<br>
+		<br>
+		<dl class="row" id="resultArea">
+			<dt class="col-sm-3" id="status"></dt>
+			<dd class="col-sm-9" id="statusMessage"></dd>
+			<dt class="col-sm-3" id="inputBold"></dt>
+			<dd class="col-sm-9" id="input"></dd>
+			<dt class="col-sm-3" id="resultBold"></dt>
+			<dd class="col-sm-9" id="result"></dd>
+		</dl>
+		<canvas id="myCanvas" width="900" height="100" style="text-align: center; display: inline; width: 100%"></canvas>
+	<script type="text/javascript">
+		const myDBName = 'DB';
+		var myDB;		// initialized by initDB()
+		const serial = 3;
+		var count = 7;
+		var sillyAnswers = [{"key": "count", "answer": count}, 
+							{"key": "0", "answer":"Maybe",},
+							{"key": "1", "answer":"Could be",},
+							{"key": "2", "answer":"Definitely not",},
+							{"key": "3", "answer":"If the weather is good",},
+							{"key": "4", "answer":"Depends on the phase of the moon",},
+							{"key": "5", "answer":"Why do you ask?",},
+							{"key": "6", "answer":"Go ask someone else",},
+							{"key": "7", "answer":"I couldn't possibly fail to disagree less",}
+						];
+
+		function initDB(relation, answers) {
+			let request = window.indexedDB.open(myDBName, serial);
+
+			request.onerror = function(event) {
+				console.log('Error loading database: ' + request.error.message);
+			}; // onerror
+			request.onsuccess = function(event) {
+				console.log('Success loading database.');
+				myDB = event.target.result; // myDB: IDBDatabase
+				myDB.onerror = function(event) {
+					console.log('error: ' + event.target.error.message);
+				}; // generic onerror
+			}; // onsuccess
+			request.onupgradeneeded = function(event) {
+				console.log('Upgrading database.');
+				myDB = this.result;
+				myDB.onerror = function(event) {
+					console.log('error: ' + event.target.error.message);
+				};
+				// Question and answer table
+				const myTable = myDB.createObjectStore(relation, {keyPath: "question", autoIncrement: true});		// question is the primary key
+				myTable.createIndex("answer", "answer", {unique: false});
+
+				// Given answer table
+				const answerPool = myDB.createObjectStore(answers, {keyPath: "key"});
+				answerPool.createIndex("answer", "answer", {unique: true});
+				event.target.transaction.oncomplete = function() {
+					addSillyAnswers(answers, sillyAnswers);
+				};
+			}; // onupgradeneeded
+		};
+
+		function addSillyAnswers(answers, sillyAnswers) {
+			sillyAnswers.forEach(function(elt){
+				const table = myDB.transaction([answers], 'readwrite').objectStore(answers);
+				const request = table.add(elt);
+				request.onsuccess = function() {
+					console.log('successfully added');
+				}; // onsuccess
+			});
+		};
+
+		function checkQuestion(relation, answers, question, userAnswer) {
+			const table = myDB.transaction([relation], "readwrite").objectStore(relation);
+			const request = table.get(question);
+			var answer;
+
+			request.onerror = function(event) {
+				console.log('error: ' + event.target.error.message);
+			}; // onerror
+
+			request.onsuccess = function(event) {
+				var data = event.target.result;
+
+				// question is not in DB
+				if (typeof(data) === "undefined") {
+					document.getElementById('status').innerHTML = "Status";
+					document.getElementById('statusMessage').innerHTML ="Question hasn't been answered yet!";
+
+					if (userAnswer == "") {
+						const getAnswer = myDB.transaction([answers], "readonly").objectStore(answers);
+						const getCount = getAnswer.get("count");
+						
+						getCount.onsuccess = function(event) {
+							var obtainedRow = event.target.result;
+							var obtainedCount = obtainedRow['answer'];
+							
+							// generate a random index key
+							var key = "" + Math.floor(Math.random() * obtainedCount) + "";
+							const requestAnswer = getAnswer.get(key);
+
+							requestAnswer.onsuccess = function(event) {
+								var field = event.target.result;
+								if (field) {
+									answer = field['answer'];
+									console.log('Selected: ' + answer);
+									document.getElementById('result').innerHTML = answer;
+									var newEntry = [{"question":question, "answer":answer}];
+									const newTable = myDB.transaction([relation], "readwrite").objectStore(relation);
+									const addRequest = newTable.add(newEntry[0]);
+									addRequest.onsuccess = function() {
+										console.log('Successfully added question: ' + question + " and answer: " + answer);
+									};
+								}
+							}; 
+							requestAnswer.onerror = function(event) {
+								console.log("Get key request failed!");
+							};
+							 
+							document.getElementById('inputBold').innerHTML = "Question";
+							document.getElementById('input').innerHTML = question;
+							document.getElementById('resultBold').innerHTML = "Answer";
+						};
+					}
+					else {
+						// add to Question and Answer table
+						var newEntry = [{"question":question, "answer":userAnswer}];
+						const newTable = myDB.transaction([relation], "readwrite").objectStore(relation);
+						const addRequest = newTable.add(newEntry[0]);
+						addRequest.onsuccess = function() {
+							console.log('Successfully added question: ' + question + " and answer: " + userAnswer);
+						};
+						addRequest.onerror = function() {
+							console.log('Cannot add new entry!');
+						};
+
+						// update count
+						const anotherTable = myDB.transaction([answers], "readwrite").objectStore(answers);
+						const addCount = anotherTable.get("count");
+						count = count + 1;
+						addCount.onsuccess = function(event) {
+							var row = event.target.result;
+							if (row) {
+								row['answer'] = count;
+								//console.log(row);
+								const updateRequest = anotherTable.put(row);
+								updateRequest.onsuccess = function() {
+									console.log("Successfully update count!")
+								};
+								updateRequest.onerror = function() {
+									console.log("Cannot modify count!")
+								};
+							}
+						};
+						addCount.onerror = function() {
+							console.log("Cannot update count!");
+						};
+
+						// add to answerPool table
+						var newAnswer = [{"key": ""+count+"", "answer": userAnswer}];
+						const anotherRequest = anotherTable.add(newAnswer[0]);
+						anotherRequest.onsuccess = function() {
+							console.log('Successfully added a new answer!');
+						};
+						anotherRequest.onerror = function() {
+							console.log('Cannot add new answer!');
+						};
+
+						document.getElementById('inputBold').innerHTML = "Question";
+						document.getElementById('input').innerHTML = question;
+						document.getElementById('resultBold').innerHTML = "Answer";
+						document.getElementById('result').innerHTML = userAnswer;
+					}
+				}
+				
+				else {	// question is in DB
+					answer = data['answer'];
+
+					document.getElementById('status').innerHTML = "Status";
+					document.getElementById('statusMessage').innerHTML = "Question has already been answered!";
+					document.getElementById('inputBold').innerHTML = "Question";
+					document.getElementById('input').innerHTML = question;
+					document.getElementById('resultBold').innerHTML = "Answer";
+					document.getElementById('result').innerHTML = answer;
+				}
+			};
+		};
+
+		function clearTable(relation) {
+			const table = myDB.transaction([relation], "readwrite").objectStore(relation);
+			const request = table.clear();
+			request.onsuccess = function() {
+				document.getElementById('status').innerHTML = "Status";
+				document.getElementById('statusMessage').innerHTML = "The database is cleared! Only 8 initial answers remained in table \"answerPool\"";
+			};
+		};
+
+		function clearAnswers(answers) {
+			const table = myDB.transaction([answers], "readwrite").objectStore(answers);
+			const getCount = table.get("count");
+			getCount.onsuccess = function(event) {
+				var row = event.target.result;
+				if (row) {
+					var cnt = row['answer'];
+					for (var i = 8; i < cnt + 1; i++) {
+						const request = table.delete(""+i+"");
+					}
+					row['answer'] = 7;
+					count = 7;
+					const updateRequest = table.put(row);
+					updateRequest.onsuccess = function() {
+						console.log("Successfully update count!")
+					};
+					updateRequest.onerror = function() {
+						console.log("Cannot modify count!")
+					};
+				}
+				document.getElementById('status').innerHTML = "Status";
+				document.getElementById('statusMessage').innerHTML = "The database is cleared! Only 8 initial answers remained in table \"answerPool\"";
+				document.getElementById('inputBold').innerHTML = "";
+				document.getElementById('input').innerHTML = "";
+				document.getElementById('resultBold').innerHTML = "";
+				document.getElementById('result').innerHTML = "";
+			};
+		};
+
+		function drawFace(region) {
+			region.drawArc({
+				fillStyle: 'white',
+				x: 450, y: 50,
+				radius: 48,
+				strokeStyle: 'black',
+			}).
+			drawArc({
+				fillStyle: 'black',
+				x: 430, y: 40,
+				radius: 7,	
+			}).
+			drawArc({
+				fillStyle: 'black',
+				x: 470, y: 40,
+				radius: 7,
+			}).
+			drawArc({
+				fillStyle: 'white',
+				x: 450, y: 35,
+				radius: 40,
+				strokeStyle: 'black',
+				strokeWidth: 2,
+				start: 130, end: 230,
+			});
+		};
+
+		function happyFace(region) {
+			region.drawArc({
+				fillStyle: 'white',
+				x: 450, y: 50,
+				radius: 48,
+				strokeStyle: 'black',
+			}).
+			drawArc({
+				fillStyle: 'white',
+				x: 430, y: 80,
+				radius: 40,
+				strokeStyle: 'black',
+				strokeWidth: 2,
+				start: 345, end: 15,
+			}).
+			drawArc({
+				fillStyle: 'black',
+				x: 470, y: 40,
+				radius: 7,
+			}).
+			drawArc({
+				fillStyle: 'white',
+				x: 450, y: 35,
+				radius: 40,
+				strokeStyle: 'black',
+				strokeWidth: 2,
+				start: 130, end: 230,
+			});
+		};
+
+		function sadFace(region) {
+			region.drawArc({
+				fillStyle: 'white',
+				x: 450, y: 50,
+				radius: 48,
+				strokeStyle: 'black',
+			}).
+			drawArc({
+				fillStyle: 'black',
+				x: 430, y: 40,
+				radius: 7,
+			}).
+			drawArc({
+				fillStyle: 'black',
+				x: 470, y: 40,
+				radius: 7,
+			}).
+			drawArc({
+				fillStyle: 'white',
+				x: 450, y: 105,
+				radius: 40,
+				strokeStyle: 'black',
+				strokeWidth: 2,
+				start: 320, end: 40,
+			});
+		};
+	</script>
+</body>
+<script
+	src="https://cdnjs.cloudflare.com/ajax/libs/jcanvas/21.0.1/jcanvas.js"
+	crossorigin="anonymous"></script>
+</html>
